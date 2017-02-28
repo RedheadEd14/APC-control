@@ -13,7 +13,7 @@ from jacobian import jacobianMatrix
 
 class SpiralZipper:
 
-	def __init__(sz, r_winch, c, looptime, armflag):
+	def __init__(sz, r_winch, c, looptime):
 			
 		#Lengths set the initial configuration of the system.
 		# Lengths: array 1x4 [L0, L1, L2, L3]
@@ -47,11 +47,10 @@ class SpiralZipper:
 
 		for port in range(2):
 			if got_port[port]:
-				#figuredout_LIDAR1 = False
-				figuredout_LIDAR2 = False
+				figuredout_LIDAR = False
 				figuredout_GYRO = False
 
-				while (not figuredout_LIDAR2 and not figuredout_GYRO):  #not figuredout_LIDAR1 and 
+				while (not figuredout_LIDAR and not figuredout_GYRO):  #not figuredout_LIDAR1 and 
 					bytesToRead = ser[port].inWaiting()
 					readings = ser[port].read(bytesToRead)
 					for t in reversed(readings.split()):  # read from most recent serial data
@@ -60,15 +59,10 @@ class SpiralZipper:
 							figuredout_GYRO = True
 							print "Port %d is GYRO" % port
 							break
-						# elif (t is '<' or t is '>'):
-						# 	sz.ser_lidar1 = ser[port]
-						# 	figuredout_LIDAR1 = True
-						# 	print "Port %d is LIDAR1" % port
-						# 	break
 						elif(t is '#' or t is '$'):
-							sz.ser_lidar2 = ser[port]
-							figuredout_LIDAR2 = True
-							print "Port %d is LIDAR2" % port
+							sz.ser_lidar = ser[port]
+							figuredout_LIDAR = True
+							print "Port %d is LIDAR" % port
 							break
 
 						else:
@@ -122,26 +116,16 @@ class SpiralZipper:
 		sz.OB = [0,0,0]
 		sz.Lprev = np.array([0,0,0,0,0,0,0,0,0,0,0,0])
 		#get ckbot's current rotation position for each Ckbot
-		if armflag == 0:
-			print "getting arm 1 readings"
-			theta1 = c.at.T1.get_pos()
-			theta2 = c.at.T2.get_pos()
-			theta3 = c.at.T3.get_pos()
-			theta4 = c.at.T7.get_pos()
-			sz.theta0 = [theta1,theta2,theta3,theta4] # initial encoder positions of the motors
-			sz.L[0] = sz.sensed_lidar(armflag)		  # initial arm length from the LIDAR
-			sensed_grav = sz.get_sensor_readings(armflag) #initial orientation from the IMU
-		elif armflag == 1:
-			print "getting arm 2 readings"
-			theta1 = c.at.T4.get_pos()
-			theta2 = c.at.T5.get_pos()
-			theta3 = c.at.T6.get_pos()
-			theta4 = c.at.T8.get_pos()
-			sz.theta0 = [theta1,theta2,theta3,theta4]
-			#sz.theta0 = [theta1,theta2,theta3]
-			sz.L[0] = sz.sensed_lidar(armflag)
-			sensed_grav = sz.get_sensor_readings(armflag) #takes the average of a set of IMU readings
 
+		print "getting arm 1 readings"
+		theta1 = c.at.T1.get_pos()
+		theta2 = c.at.T2.get_pos()
+		theta3 = c.at.T3.get_pos()
+		theta4 = c.at.T4.get_pos()
+		sz.theta0 = [theta1,theta2,theta3,theta4] # initial encoder positions of the motors
+		sz.L[0] = sz.sensed_lidar()		  # initial arm length from the LIDAR
+		sensed_grav = sz.get_sensor_readings() #initial orientation from the IMU
+		
 		sz.theta_prev = sz.theta0 # used to update delta position
 		sz.theta_curr = sz.theta0 # will hold the current theta of the system
 
@@ -162,14 +146,11 @@ class SpiralZipper:
 		print sz.L
 
 		sz.sensed_pos_prev = sz.sensed_pos
-		#if armflag == 0:
-		#slack.slack_remove(sz,c, 0)
-		#if armflag == 1:
-			#slack.slack_remove(sz,c, 1)
+		#slack.slack_remove(sz,c)
 
 
 	def vacuum_cleaner(sz):  #sends a command to the arduino that controls the vacuum.  Toggles it on and off
-		sz.ser_lidar2.write("r")
+		sz.ser_lidar.write("r")
 
 	def slack_removal(sz,c):
 		slack.slack_remove(sz,c, 1)
@@ -213,23 +194,16 @@ class SpiralZipper:
 	#def get_goal(sz): 	#get goal information
 	#	return sz.goal= xyz + np.dot(R,sz.ef[1])		
 
-	def update_state (sz, c,armflag):
+	def update_state (sz, c):
 		#This function updates the position of the system based on encoder data and the IMU.
 
-		if armflag ==0:		
-			theta1 = c.at.T1.get_pos()
-			theta2 = c.at.T2.get_pos()
-			theta3 = c.at.T3.get_pos()
-			#theta4 = c.at.T7.get_pos()
-			theta_reading = [theta1,theta2,theta3]
-			theta_reading = [theta1,theta2,theta3,theta4]
-		if armflag ==1:		
-			theta1 = c.at.T4.get_pos()
-			theta2 = c.at.T5.get_pos()
-			theta3 = c.at.T6.get_pos()
-			theta4 = c.at.T8.get_pos()
-			#theta_reading = [theta1,theta2,theta3]
-			theta_reading = [theta1,theta2,theta3,theta4]
+		theta1 = c.at.T1.get_pos()
+		theta2 = c.at.T2.get_pos()
+		theta3 = c.at.T3.get_pos()
+		theta4 = c.at.T4.get_pos()
+		#theta_reading = [theta1,theta2,theta3]
+		theta_reading = [theta1,theta2,theta3,theta4]
+	
 		#print "motor theta readings:"
 		#print theta_reading
 
@@ -240,11 +214,8 @@ class SpiralZipper:
 
 		#devins_constant = .00476991#2091  # ratio of column motor rotation to change in column height. radians/meter
 		devins_constant = .00955 #0.06/(2*3.14159)  # change in column height is 16 cm/rev of the column. 2.666 motor revs/column rev.  .06 cm/motor revs constants convert units to [cm/rad]
-		
-		# calculate the new state of each tether since CCW delta is assumed positive we check how the tether
-		# grows in the CCW directiatan(.1674/.3139) *180/pi. if it subtracts we take the negative of the delta to change signs
 
-		#rotation = sz.get_sensor_readings(armflag)
+		#rotation = sz.get_sensor_readings()
 		#sz.L[0] = sz.L[0] - dtheta[0] * devins_constant #0.06/(2*3.14159)  #change in column height is 16 cm/rev of the column. 2.666 motor revs/column
 		#sz.sensed_pos = sz.rotate(rotation[0],rotation[1],sz.L[0])
 
@@ -308,65 +279,6 @@ class SpiralZipper:
 				sz.L_vel_desired[i] = (L_goal[i] - sz.L[i]) / sz.looptime
 		else: 		 # Position: Takes given input and directly sets it as the goal.
 			sz.L_pos_desired = L_goal 
-		
-
-	def end_effector_position(sz,A,B): #forward kinematics. Good for logging but not necessary for control
-		yaw = np.arcsin((A[1]-B[1])/np.linalg.norm(A-B))
-		pitch = np.arcsin((A[2]-B[2])/np.linalg.norm(A-B))
-			
-		print A
-		print B
-		print "yaw is %f" %yaw
-		print "pitch is %f" %pitch
-		R_yaw = np.array([[np.cos(yaw), -np.sin(yaw), 0],\
-				   		   [np.sin(yaw),  np.cos(yaw), 0],\
-				   		   [0	       ,  0	     	 , 1]])
-
-		R_pitch = np.array([[ np.cos(pitch), 0, np.sin(pitch)],\
-				     		 [0		    	, 1, 0	      	  ],\
-				     		 [-np.sin(pitch), 0, np.cos(pitch)]])
-
-		C = np.dot(np.dot(R_yaw,R_pitch),np.array([.25,0,0])) + np.array([A[0],A[1],A[2]])
-		return C
-
-	def end_effector_goal(sz,C_des, yaw_des, pitch_des): #inverse kinematics
-
-		R_yaw = np.array([[np.cos(yaw_des), -np.sin(yaw_des), 0],\
-				   		   [np.sin(yaw_des),  np.cos(yaw_des), 0],\
-				   		   [0		   	   ,  0		     	 , 1]])
-
-		R_pitch = np.array([[ np.cos(pitch_des), 0, np.sin(pitch_des)],\
-				    		 [ 0				, 1, 0		     	  ],\
-				    		 [-np.sin(pitch_des), 0, np.cos(pitch_des)]])
-
-		A_des = C_des - R_pitch * R_yaw * np.matrix([[.25] ,[0] ,[0]]) # walks backward to A from endeffector based on angles
-		
-		BA = .51  #distance between A and B. Simplifies the calculations, but not a necessary condition
-		
-		By = BA * np.sin(yaw_des) + A_des[1]  #gets B from desired angles assuming a fixed distance between A and B
-		Bz = BA * np.sin(pitch_des) + A_des[2]
-		Bx = A_des[0] - np.sqrt(.51**2 - (A_des[1] - By)**2 - (A_des[2] - Bz)**2)
-		B_des = np.matrix([[Bx.item(0)], [By.item(0)], [Bz.item(0)]]) 
-
-		a = A_des - np.matrix([[0], [0], [.09]]) #shifts the desired position from the position of the crossarm to the end of the actual arm
-		b = B_des - np.matrix([[-.51], [0], [.09]])	
-		ab = [a.item(0), a.item(1), a.item(2), b.item(0), b.item(1), b.item(2)]
-		print ab
-		return ab
-
-	def Camera_2_World(sz, p_1):
-		psi = np.pi/4
-		phi = np.pi/2 + np.pi/12
-		H_10 = np.array([[ np.cos(psi), np.cos(phi)*np.sin(psi), np.sin(phi)*np.sin(psi), 0.04  ],\
-						  [-np.sin(psi), np.cos(phi)*np.cos(psi), np.sin(phi)*np.cos(psi),-0.28  ],\
-						  [ 0	       ,-np.sin(phi)	        , np.cos(phi)		 	 , 0.5725],\
-						  [ 0	       , 0                      , 0                      , 1     ]])
-
-		p_0 = np.dot(H_10, p_1)
-		print "p_0 is "
-		print p_0
-
-		return np.array([p_0.item(0),p_0.item(1),p_0.item(2)])
 
 	def cart2tether_actual(sz,xyz):
 		#convert a cartesian goal to tether length goals. assumes the tethers go to points on the outside edge of the end effector.
@@ -432,24 +344,12 @@ class SpiralZipper:
 		velocity = np.dot(J.J_AB,tether_vectors) * adjustment_factor
 		return velocity
 
-
-
 	def rotate(sz,p,q,r): # determines current orientation based on gravity data
 		# initial position vector
 		v = np.array([0,0,r])
 		# Euler angles in degrees from the sensor
 		# CCW +ve, CW -ve
 		#need to check how things fall here
-		'''a =  (q) * pi/180  #-1.875
-		b =  (p) * pi/180  #+.5
-		# Rotation matrix
-		Ra = np.array([[1, 0 	  ,  0		 ],\
-					   [0, m.cos(a),-m.sin(a)],\
-					   [0, m.sin(a), m.cos(a)]])
-		Rb = np.array([[ m.cos(b), 0 , m.sin(b)],\
-					  [  0		 , 1 , 0	   ],\
-					  [ -m.sin(b), 0 , m.cos(b)]])
-		R = np.dot(Ra,Rb)'''
 		a = m.asin((q )/9.8)#  + .0875#gets angle and accounts for bias in IMU reading
 		b = m.asin((p )/9.8)#  + .01438
 
@@ -467,20 +367,7 @@ class SpiralZipper:
 
 		return np.arccos(np.dot(v1_u, v2_u))  
 
-	def calc_L1(sz, l_state):  #this is probably an unnecessary calculation. get_xyz_pos trilaterates using this tether length.  It shouldn't.
-		#Trilateration should done using tether lengths 2 and 3, and the column length
-		p1 = (sz.rb+.003)*np.array([0,1,0]) #Coordinates for motor 1
-		a = sz.rb*np.cos(pi/6)
-		b = sz.rb*np.sin(pi/6)
-
-		x = ((l_state[1]**2)-(l_state[0]**2))/(4*a)
-		y = -((sz.L[0]**2)-(l_state[0]**2)+(a**2)+(b**2))/(2*b)+((l_state[1]**2)-(l_state[0]**2))/(4*b)
-		z = abs(((sz.L[0]**2)-(x**2)-(y**2)))**0.5
-
-		xyz = [x,y,z]
-		return np.linalg.norm(xyz-p1) #Tether length L1 is calculated
-
-	def get_sensor_readings(sz,armflag):
+	def get_sensor_readings(sz):
 		l = []
 		l2 = []
 		startread = False
@@ -537,57 +424,21 @@ class SpiralZipper:
 		sz.lold = l			
 			#if (len(l2) != 3 or len(l) != 3):
 			#	sleep(0.01)
-
-		'''for i in range(3):
-			if l[i] >= 9.82:
-				l[i] = l[i]/100
-			if l2[i] >= 9.82:
-				l2[i] = l2[i]/100'''
-
 		#print "Sensor Readings:"
-		#print l, l2
+		#print l
 
 		#print "sensor loop repeats %f" %count
 		sz.ser_gyro.flushInput()
-		if armflag ==0:
-			return l #check which sensor needs to be checked.  Change between l and l2 as necessary
-		elif armflag ==1:
-			return l2
+		return l2
 
-	def get_lidar1_readings(sz):  #reads lidar sensor data back
+	def get_lidar_readings(sz):  #reads lidar sensor data back
 		l = []
 		while (len(l) != 1):
 			#bytesToRead = sz.ser_lidar1.inWaiting()
 			#readings = sz.ser_lidar1.read(bytesToRead)
 			#sz.ser_lidar1.flushInput()
 			sleep(.1)
-			readings = sz.ser_lidar1.readline()
-			l = []
-			startread = False
-			for t in reversed(readings.split()):  # read from most recent serial data
-				if (t is '>'):
-					startread = True
-					continue
-				if (startread):
-					if (t is '<'):
-						break
-					else:
-						try:
-							l.append(float(t))
-						except ValueError:
-							pass
-			l = l[::-1]  # Reverse readings to get in [x y z] order
-			if (len(l) != 1):
-				sleep(0.05)
-			#print "LIDAR Readings:"
-			#print l
-		p = (l[0] * .001 + .02)
-		return np.array(p)
-
-	def get_lidar2_readings(sz):  #reads lidar sensor data back
-		l = []
-		while (len(l) != 1):			
-			readings = sz.ser_lidar2.readline()
+			readings = sz.ser_lidar.readline()
 			l = []
 			startread = False
 			for t in reversed(readings.split()):  # read from most recent serial data
@@ -605,52 +456,22 @@ class SpiralZipper:
 			l = l[::-1]  # Reverse readings to get in [x y z] order
 			if (len(l) != 1):
 				sleep(0.05)
-			print "LIDAR Readings:"
-			print l
+			#print "LIDAR Readings:"
+			#print l
 		p = (l[0] * .001 + .02)
-		
-		sz.ser_lidar2.write("s") #stops arduino from printing data
 		return np.array(p)
 
-	def sensed_lidar(sz,flag):  #averages a set of 5 lidar readings
-		avg = 0		
-		if flag == 0:		
-			size = 10
-			for i in range(10):
-				read = sz.get_lidar1_readings()        
-				if read < .12:  #throws away bad data
-					read = 0
-					size = size - 1
-				avg = avg + read
-			avg = avg/size
-		if flag == 1:
-			size = 10
-			for i in range(10):
-				read = sz.get_lidar2_readings()        
-				if read < .12:
-					read = 0
-					size = size - 1
-				avg = avg + read
-			if size == 0:
-				print "ERROR. lidar not sensing column height properly"
-				size = 1
-			avg = avg / size
+	def sensed_lidar(sz):  #averages a set of 5 lidar readings
+		avg = 0				
+		size = 10
+		for i in range(10):
+			read = sz.get_lidar_readings()        
+			if read < .12:  #throws away bad data
+				read = 0
+				size = size - 1
+			avg = avg + read
+		avg = avg/size
 		return avg
-
-	def get_xyz_pos(sz): #Performs Trilateration to get XYZ position
-		#assumes tethers begin in z=0 plane and end at the center of the end effector. Also is currently using the three tether lengths. It ought to use tethers 2 & 3 and the column length
-		#return end effector position.
-		#triangulate the end effector position wikipedia this not x and y are swapped
-		d = sz.rb*(3)**0.5 #from state init
-		i = d/2
-		j = (d**2-i**2)**0.5
-
-		x = (sz.L[3]**2-sz.L[2]**2+d**2)/(2*d)#+i**2+j**2)/(2*j)-i/j*x
-		y = (sz.L[3]**2-sz.L[1]**2-x**2+(x-i)**2+j**2)/(2*j)
-		#import pdb; pdb.set_trace()
-		z = (sz.L[3]**2-y**2-x**2)**0.5
-		position_xyz = np.array([x,y,z])+np.array(sz.p[2]) # shift offset
-		return position_xyz
 
 	def PID_pos_control(sz,remote_or_auto): #position PID control
 		desired_pos = sz.L_pos_desired #creates a local variable from the object variable
@@ -774,7 +595,7 @@ class SpiralZipper:
 
 		return command_torques
 
-	def actuate_Motors(sz, c, armflag, remote_or_auto):  #converts desired user input commands into useable servo command inputs
+	def actuate_Motors(sz, c, remote_or_auto):  #converts desired user input commands into useable servo command inputs
 
 		if remote_or_auto == 0:
 			command_torques = sz.PID_vel_control(remote_or_auto)
@@ -791,17 +612,10 @@ class SpiralZipper:
 			command_torques[0] = -.1
 
  		#modification of the constants allows user to specify an extra torque input for the tethers when retracting.  this helps ensure the tethers never go slack.  Probably an obsolete command that can be removed.  Command also flips the sign to fit the system convention.
-		if armflag == 0:
-			c.at.T1.set_torque(-command_torques[0])
-			c.at.T2.set_torque(-command_torques[1])
-			c.at.T3.set_torque(-command_torques[2])
-			#c.at.T7.set_torque(-command_torques[3])
-		elif armflag == 1:
-			c.at.T4.set_torque(-command_torques[0])
-			c.at.T5.set_torque(-command_torques[1])
-			c.at.T6.set_torque(-command_torques[2])
-			c.at.T8.set_torque(-command_torques[3])
-
+		c.at.T1.set_torque(-command_torques[0])
+		c.at.T2.set_torque(-command_torques[1])
+		c.at.T3.set_torque(-command_torques[2])
+		c.at.T4.set_torque(-command_torques[3])
 
 	def trajectory(sz,itime):
 		ftime = itime + 10
