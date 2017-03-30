@@ -123,12 +123,16 @@ class SpiralZipper:
 		theta3 = c.at.T3.get_pos()
 		theta4 = c.at.T4.get_pos()
 		sz.theta0 = [theta1,theta2,theta3,theta4] # initial encoder positions of the motors
-		sz.L[0] = sz.sensed_lidar()		  # initial arm length from the LIDAR
-		sensed_grav = sz.get_sensor_readings() #initial orientation from the IMU
-		
 		sz.theta_prev = sz.theta0 # used to update delta position
 		sz.theta_curr = sz.theta0 # will hold the current theta of the system
 
+		sz.L[0] = sz.sensed_lidar()		  # initial arm length from the LIDAR
+
+		sensed_grav = sz.get_sensor_readings() #initial orientation from the IMU
+		while (sensed_grav[0] == 0 and sensed_grav[1] == 0 and sensed_grav[2] == 0):
+			sensed_grav = sz.get_sensor_readings() #takes the average of a set of IMU readings
+			print sensed_grav
+		
 		# Initial Sensed Position.
 		sz.sensed_pos = sz.rotate(sensed_grav[0], sensed_grav[1],sz.L[0])
 		sz.L = sz.cart2tether_actual(sz.sensed_pos)
@@ -147,7 +151,10 @@ class SpiralZipper:
 
 		sz.sensed_pos_prev = sz.sensed_pos
 		#slack.slack_remove(sz,c)
-
+		c.at.T1.set_torque(0)
+		c.at.T2.set_torque(0)
+		c.at.T3.set_torque(0)
+		c.at.T4.set_torque(0)
 
 	def vacuum_cleaner(sz):  #sends a command to the arduino that controls the vacuum.  Toggles it on and off
 		sz.ser_lidar.write("r")
@@ -212,21 +219,24 @@ class SpiralZipper:
 		dtheta = sz.get_CR_delta() # calculate the change in position since last call
 		sz.theta_prev = sz.theta_curr
 
-		#devins_constant = .00476991#2091  # ratio of column motor rotation to change in column height. radians/meter
-		devins_constant = .00955 #0.06/(2*3.14159)  # change in column height is 16 cm/rev of the column. 2.666 motor revs/column rev.  .06 cm/motor revs constants convert units to [cm/rad]
+		devins_constant = .00476991 #2091  # ratio of column motor rotation to change in column height. radians/meter
+		#devins_constant = .0042
+		#devins_constant = .006#2091  # ratio of column motor rotation to change in column height. radians/meter
+		
+		#devins_constant = .00955 #0.06/(2*3.14159)  # change in column height is 16 cm/rev of the column. 2.666 motor revs/column rev.  .06 cm/motor revs constants convert units to [cm/rad]
 
-		#rotation = sz.get_sensor_readings()
-		#sz.L[0] = sz.L[0] - dtheta[0] * devins_constant #0.06/(2*3.14159)  #change in column height is 16 cm/rev of the column. 2.666 motor revs/column
-		#sz.sensed_pos = sz.rotate(rotation[0],rotation[1],sz.L[0])
+		rotation = sz.get_sensor_readings()
+		sz.L[0] = sz.L[0] + dtheta[0] * devins_constant #0.06/(2*3.14159)  #change in column height is 16 cm/rev of the column. 2.666 motor revs/column
+		sz.sensed_pos = sz.rotate(rotation[0],rotation[1],sz.L[0])
 
-		#sz.L = sz.cart2tether_actual(sz.sensed_pos)  #tether length update based on IMU only
+		sz.L = sz.cart2tether_actual(sz.sensed_pos)  #tether length update based on IMU only
 
-		sz.L[0] = sz.L[0] - dtheta[0] * devins_constant # tether length update based on encoder data only
-		sz.L[1] = sz.L[1] - dtheta[3]*sz.r_winch
-		sz.L[2] = sz.L[2] - dtheta[1]*sz.r_winch 
-		sz.L[3] = sz.L[3] - dtheta[2]*sz.r_winch
+		#sz.L[0] = sz.L[0] - dtheta[0] * devins_constant # tether length update based on encoder data only
+		#sz.L[1] = sz.L[1] - dtheta[3]*sz.r_winch
+		#sz.L[2] = sz.L[2] - dtheta[1]*sz.r_winch 
+		#sz.L[3] = sz.L[3] - dtheta[2]*sz.r_winch
 
-		sz.L_vel_actual[0] = (-dtheta[0] * devins_constant) / sz.looptime #gets the current speed of the system from encoder data
+		sz.L_vel_actual[0] = (dtheta[0] * devins_constant) / sz.looptime #gets the current speed of the system from encoder data
 		sz.L_vel_actual[1] = (-dtheta[3] * sz.r_winch) / sz.looptime
 		sz.L_vel_actual[2] = (-dtheta[1] * sz.r_winch) / sz.looptime
 		sz.L_vel_actual[3] = (-dtheta[2] * sz.r_winch) / sz.looptime
@@ -262,10 +272,13 @@ class SpiralZipper:
 
 	def update_goal(sz,delta,mode):
 		if mode == 0: # Velocity: adds a delta value to the current position to create a goal position
-			sz.L0_desired = sz.L[0] + delta[2]
-			sz.goal = sz.sensed_pos_prev + np.array([delta[0],delta[1],0]) 		
-			sz.goal = (np.array(sz.goal)/np.linalg.norm(sz.goal))*sz.L0_desired
-			sz.sensed_pos_prev = sz.goal
+			if (sz.sensed_pos[0] == 0 and sz.sensed_pos[1] ==0):
+				sz.goal = sz.sensed_pos
+			else:
+				sz.L0_desired = sz.L[0] + delta[2]
+				sz.goal = sz.goal + np.array([delta[0],delta[1],0]) 		
+				sz.goal = (np.array(sz.goal)/np.linalg.norm(sz.goal))*sz.L0_desired
+				sz.sensed_pos_prev = sz.sensed_pos
 			# print "goal is"
 			# print sz.goal
 		else: 		 # Position: Takes given input and directly sets it as the goal.
@@ -396,7 +409,7 @@ class SpiralZipper:
 						finished2 = True
 					else:
 						try:
-							l2.append(float(t))
+							l.append(float(t))
 						except ValueError:
 							pass
 
@@ -410,7 +423,7 @@ class SpiralZipper:
 
 					else:
 						try:
-							l.append(float(t))
+							l2.append(float(t))
 						except ValueError:
 							pass
 				if (finished1 and finished2):
@@ -544,7 +557,7 @@ class SpiralZipper:
 		error = np.array(desired_vel)-np.array(actual_vel)  #P control variable
 
 		sz.errorsumV = sz.errorsumV + (np.array(desired_vel) - np.array(actual_vel))  #I control variable
-		errorsummax = .35  #sets a limit on how large the I parameter can grow.  Needs to be tuned
+		errorsummax = .1  #sets a limit on how large the I parameter can grow.  Needs to be tuned
 		for i in range(4):  #antiwindup loop. Ensures I term never grows larger than the errorsum max
 			if sz.errorsumV[i] > errorsummax:
 				sz.errorsumV[i] = errorsummax
@@ -612,7 +625,7 @@ class SpiralZipper:
 			command_torques[0] = -.1
 
  		#modification of the constants allows user to specify an extra torque input for the tethers when retracting.  this helps ensure the tethers never go slack.  Probably an obsolete command that can be removed.  Command also flips the sign to fit the system convention.
-		c.at.T1.set_torque(-command_torques[0])
+		c.at.T1.set_torque(command_torques[0])
 		c.at.T2.set_torque(-command_torques[1])
 		c.at.T3.set_torque(-command_torques[2])
 		c.at.T4.set_torque(-command_torques[3])

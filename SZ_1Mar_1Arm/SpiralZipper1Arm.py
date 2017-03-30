@@ -85,26 +85,26 @@ if __name__=="__main__":
 
 	########### INITIALIZE ARMS ############
 	r_winch = 0.0199 #radius of the pulleys on the motors
+	# r_winch = 0.0225 #radius of the pulleys on the motors
+
 	looptime = 0.1
 
-	flag = 0 #toggles trajectory motion with joystick motion.  Need to get rid of.
-	mode = 1  #State machine flag
 	sz1 = sz.SpiralZipper(r_winch, c, looptime)
 
 	#### SETS VELOCITY CONTROL GAINS ####
-	Kp1 = 20 #proportional gains
-	Kp2 = 5
-	Kp3 = 5
+	Kp1 = 25 #proportional gains
+	Kp2 = 3
+	Kp3 = 3
 	Kp = [Kp1,Kp2,Kp3]
     
 	Ki1 = 1.25  #integral gains							
-	Ki2 = 1.
-	Ki3 = 1.
+	Ki2 = .3
+	Ki3 = .3
 	Ki = [Ki1,Ki2,Ki3]
 
-	Kd1 = 0#.005
-	Kd2 = 0#.005
-	Kd3 = 0#.005
+	Kd1 = 0.075
+	Kd2 = 0.075
+	Kd3 = 0.075
 	Kd = [Kd1,Kd2,Kd3]
 
 	sz1.set_Kp_Gains(Kp,0)
@@ -132,14 +132,17 @@ if __name__=="__main__":
 	sz1.set_Kd_Gains(Kd,1)
 
 	#### SETS JOYSTICK INPUT GAINS ####
-	Kx = 0.02 
-	Ky = 0.02
-	Kz = 0.04
+	Kx = 0.05 
+	Ky = 0.05
+	Kz = 0.005
 
 	#end_effector_old = np.matrix([[.25],[0],[.4]])
 	#end_effector_des = np.matrix([[.25],[0],[.4]])
 	#sz1.slack_removal(c)
 	sensed_pos_prev = [0,0,0]
+	flag = 0 #toggles trajectory motion with joystick motion.  Need to get rid of.
+	mode = 0  #State machine flag
+	sz1.errorsumV = [0,0,0,0]
 
 	print "Spiral Zipper demo initialized"
 	old_report = now()
@@ -172,7 +175,7 @@ if __name__=="__main__":
 
 						elif evt.button is 1: #Reinitializes outer loop control using the IMU.
 							#sz1.slack_removal(c)
-							sz1.L[0] = sz1.sensed_lidar()
+							#sz1.L[0] = sz1.sensed_lidar()
 							rotation = sz1.get_sensor_readings()
 							sz1.sensed_pos = sz1.rotate(rotation[0],rotation[1],sz1.L[0])
 							sz1.L = sz1.cart2tether_actual(sz1.sensed_pos)  #tether length update based on IMU only
@@ -196,7 +199,7 @@ if __name__=="__main__":
 
 						elif evt.button is 6: #arm 1 down in Velocity control mode
 							z1_flag = not z1_flag
-							if z1_flag == True:
+							if z1_flag:
 								z1_move = -1
 							else:
 								z1_move = 0
@@ -234,6 +237,8 @@ if __name__=="__main__":
 						if flag == 1: #BAD AND EVIL FLAG.  set flag bypasses user input velocity commands for a set path using the velocity controller
 							sz1.trajectory(initial_time)
 						else :
+							Kx = (sz1.L[0] * .03 + .005)
+							Ky = Kx
 							sz1.update_goal([-x2_move*Kx,y2_move*Ky,z2_move*Kz],mode)
 						remote_or_auto = 0  	#flag toggles features in the functions called below that are calibrated to the two different controllers
 
@@ -243,30 +248,31 @@ if __name__=="__main__":
 					if flag == 0: #BAD AND EVIL FLAG. Flag is only 1 when the system is in trajectory mode.
 						sz1.set_tether_speeds(mode) 
 
-					sz1.actuate_Motors(c,remote_or_auto) 
+					#sz1.actuate_Motors(c,remote_or_auto) 
 				
 					####################### DATA MONITORING #################################
 
-					sensed_grav = sz1.get_sensor_readings() 
-					while (sensed_grav[0] == 0 and sensed_grav[1] == 0 and sensed_grav[2] == 0):
-						sensed_grav = sz1.get_sensor_readings() #takes the average of a set of IMU readings
-						print sensed_grav
-					sensed_pos = sz1.rotate(sensed_grav[0], sensed_grav[1],sz1.L[0])
+					# sensed_grav = sz1.get_sensor_readings() 
+					# while (sensed_grav[0] == 0 and sensed_grav[1] == 0 and sensed_grav[2] == 0):
+					# 	sensed_grav = sz1.get_sensor_readings() #takes the average of a set of IMU readings
+					# 	print sensed_grav
+					# sensed_pos = sz1.rotate(sensed_grav[0], sensed_grav[1],sz1.L[0])
 
-					velocity_measured = (sensed_pos -sensed_pos_prev) / sz1.looptime
-					sensed_pos_prev = sensed_pos
+					# velocity_measured = (sensed_pos -sensed_pos_prev) / sz1.looptime
+					# sensed_pos_prev = sensed_pos
 
 
-					j_velocity = sz1.Jacobian_Math(sensed_pos)
-					print "Jacobian velocity is : "
-					print np.squeeze(j_velocity)
+					#j_velocity = sz1.Jacobian_Math(sensed_pos)
+					#print "Jacobian velocity is : "
+					#print np.squeeze(j_velocity)
 
-					print "measured velocity is "
-					print velocity_measured
+					#print "measured velocity is "
+					#print velocity_measured
 
 					print "position is "
-					print sensed_pos
-
+					print sz1.sensed_pos
+					print "goal is"
+					print sz1.goal
 
 					
 					# print "arm tether velocities: "
@@ -274,8 +280,7 @@ if __name__=="__main__":
 
 					#print "end effector position is : "
 					#print end_effector_pos
-					# print "goal is"
-					# print sz1.get_goal()
+
 
 					# print "current tether lengths : "
 					# print sz1.L
@@ -285,19 +290,19 @@ if __name__=="__main__":
 					#print "arm 1 desired tether velocities: "			
 					#print sz1.L_vel_desired
 
-					# Torques = [c.at.T1.get_torque(), 
-					# 	   c.at.T2.get_torque(), 
-					# 	   c.at.T3.get_torque()]
+					Torques = [c.at.T1.get_torque(), 
+						   c.at.T2.get_torque(), 
+						   c.at.T3.get_torque()]
 
-					# print "Torques are: "
-					# print Torques
+					print "Torques are: "
+					print Torques
 
 					########## Graphing ###########
 					# updates liveplots based on IMU data and desired inputs.
 					xarray.append(now())  
-					y1array.append(sensed_pos[0])
-					y2array.append(sensed_pos[1])
-					y3array.append(sensed_pos[2])
+					y1array.append(sz1.sensed_pos[0])
+					y2array.append(sz1.sensed_pos[1])
+					y3array.append(sz1.sensed_pos[2])
 					y1darray.append(sz1.goal[0])
 					y2darray.append(sz1.goal[1])
 					y3darray.append(sz1.goal[2])
@@ -357,6 +362,6 @@ if __name__=="__main__":
 		m.set_torque(0)
 
 	print "Closing all data files..."
-	sz1.data_store_measurement.close()
-	sz1.data_store_estimate.close()
-	sz1.data_store_predict.close()
+	# sz1.data_store_measurement.close()
+	# sz1.data_store_estimate.close()
+	# sz1.data_store_predict.close()
