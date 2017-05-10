@@ -9,11 +9,11 @@ void setup()
 {
   Serial.begin(57600);
   angleSensor.init();
-  angleSensor.setZeroPosition(0x28ED);
+  angleSensor.setZeroPosition(0x1B14);
   angleSensor.close();// close after each init to allow spi to start again
   
   angleSensor2.init();// i made the clock 10Mhz. it was 1Mhz to star
-  angleSensor2.setZeroPosition(0x238);
+  angleSensor2.setZeroPosition(0x21E);
   angleSensor2.close();// close after each init to allow spi to start again
 }
 int dt = 0;
@@ -25,7 +25,7 @@ void loop()
 
 //  past = micros();
 //  word val = angleSensor.getRawRotation();
-//  Serial.print("Got rotation of: 0x");
+//  Serial.print("Sen_1 : ");
 //  Serial.println(val, HEX);
 //  Serial.print("Sen_1: ");
   //Serial.println(val);
@@ -38,7 +38,7 @@ void loop()
 //Serial.print(" : Errors: ");
 //Serial.println(angleSensor.getErrors());
 angleSensor.getErrors();
-
+//
 //  word val2 = angleSensor2.getRawRotation();
 //  Serial.print("Sen_2: ");
 //  Serial.println(val2,HEX);
@@ -48,7 +48,7 @@ angleSensor.getErrors();
 //  Serial.println(pos2);
 
   Serial.print("[ ");
-  Serial.print(pos2,4);
+  Serial.print(-pos2,4);
   Serial.print(" ");
   Serial.print(pos,4);
   Serial.println(" ]");

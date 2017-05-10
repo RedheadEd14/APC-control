@@ -44,29 +44,33 @@ class SpiralZipper:
 		# 	print "No Arduino on ACM2"
 		# 	print str(e)
 		# 	sgot_port[2] = 0
-
 		for port in range(2):
 			if got_port[port]:
 				figuredout_LIDAR = False
 				figuredout_GYRO = False
-
-				while (not figuredout_LIDAR and not figuredout_GYRO):  #not figuredout_LIDAR1 and 
+				figuredout_ENCODER = False
+				while (not figuredout_LIDAR and not figuredout_ENCODER):  #not figuredout_LIDAR1 and 
 					bytesToRead = ser[port].inWaiting()
 					readings = ser[port].read(bytesToRead)
 					for t in reversed(readings.split()):  # read from most recent serial data
-						if (t is ']' or t is '[' or t is '}' or t is '{'):
-							sz.ser_gyro = ser[port]
-							figuredout_GYRO = True
-							print "Port %d is GYRO" % port
-							break
-						elif(t is '#' or t is '$'):
+						
+						if(t is '#' or t is '$'):
 							sz.ser_lidar = ser[port]
 							figuredout_LIDAR = True
 							print "Port %d is LIDAR" % port
 							break
-
+						elif (t is ']' or t is '[' ):# or t is '}' or t is '{'):
+							#sz.ser_gyro = ser[port]
+							sz.ser_encoder = ser[port]
+							#figuredout_GYRO = True
+   							figuredout_ENCODER = True
+							#print "Port %d is GYRO" % port
+							print "Port %d is encoder" % port
+							break
 						else:
 							print "Undecided..."
+					# ser[port].flushInput()
+	
 			else:
 				print "Nothing on port %d" % port
 
@@ -86,15 +90,16 @@ class SpiralZipper:
 		sz.radian_const = 0.06*np.pi/180
 
 		#initializes robot geometric parameters. Constant
-		sz.rb = 0.225          # circle inscribing the spiral zipper motors #.22 for the APC arm, .11 for the RCTA arm
+		sz.rb = 0.235          # circle inscribing the spiral zipper motors #.22 for the APC arm, .11 for the RCTA arm
 		sz.rt = 0.0695  	   # diameter of the spiral zipper column
 		sz.r_winch = r_winch   # the radius of the winch used to wind tether.
-		phi = 28.81 * pi/180   # phi ~ pi/6 rad
+		phi = 30 * pi/180
+		# phi = 28.81 * pi/180   # phi ~ pi/6 rad
 
 		# positions of the motors in xyz
-		p1 = (sz.rb + .005)*np.array([0,1, 0]) + np.array([0,0,.1119])  
-		p2 = sz.rb*np.array([np.cos(phi),-np.sin(phi), 0]) + np.array([0,0,.1119])
-		p3 = sz.rb*np.array([-np.cos(phi),-np.sin(phi), 0]) + np.array([0,0,.1119])
+		p1 = (sz.rb + .01)*np.array([0,1, 0]) + np.array([0,0,.11])  
+		p2 = sz.rb*np.array([np.cos(phi),-np.sin(phi), 0]) + np.array([0,0,.11])
+		p3 = sz.rb*np.array([-np.cos(phi),-np.sin(phi), 0]) + np.array([0,0,.11])
 		sz.p = [p1,p2,p3]
 
 		# tether attachment points on the end effector assuming arm is straight upsz.OB
@@ -126,23 +131,24 @@ class SpiralZipper:
 		sz.theta_prev = sz.theta0 # used to update delta position
 		sz.theta_curr = sz.theta0 # will hold the current theta of the system
 
+		#sz.L[0] = input("Please set the current length of arm in meters.")
 		sz.L[0] = sz.sensed_lidar()		  # initial arm length from the LIDAR
 
-		sensed_grav = sz.get_sensor_readings() #initial orientation from the IMU
-		while (sensed_grav[0] == 0 and sensed_grav[1] == 0 and sensed_grav[2] == 0):
-			sensed_grav = sz.get_sensor_readings() #takes the average of a set of IMU readings
+		sensed_grav = sz.get_encoder_readings() #initial orientation from the IMU
+		while (sensed_grav[0] > 1.57 or sensed_grav[0] < -1.57 or sensed_grav[1] < -1.57 or sensed_grav[1] > 1.57 ):
+			sensed_grav = sz.get_encoder_readings() #takes the average of a set of IMU readings
 			print sensed_grav
 		
 		# Initial Sensed Position.
-		sz.sensed_pos = sz.rotate(sensed_grav[0], sensed_grav[1],sz.L[0])
+		sz.sensed_pos = sz.rotate_encoder(sensed_grav[0], sensed_grav[1],sz.L[0])
 		sz.L = sz.cart2tether_actual(sz.sensed_pos)
 
 		# Initial Desired Position
 		sz.L0_desired = sz.L[0]		
 		sz.update_goal(sz.sensed_pos, 1) 
-		sz.set_tether_speeds(1)
+		#sz.set_tether_speeds(1)
 
-		print "sensed_accelerations "
+		print "sensed_orientation "
 		print sensed_grav
 		print "Sensed_Position "
 		print sz.sensed_pos
@@ -203,7 +209,7 @@ class SpiralZipper:
 
 	def update_state (sz, c):
 		#This function updates the position of the system based on encoder data and the IMU.
-
+		
 		theta1 = c.at.T1.get_pos()
 		theta2 = c.at.T2.get_pos()
 		theta3 = c.at.T3.get_pos()
@@ -211,23 +217,23 @@ class SpiralZipper:
 		#theta_reading = [theta1,theta2,theta3]
 		theta_reading = [theta1,theta2,theta3,theta4]
 	
-		#print "motor theta readings:"
-		#print theta_reading
+		# print "motor theta readings:"
+		# print theta1
 
 		sz.theta_curr = theta_reading # update current theta
 		
 		dtheta = sz.get_CR_delta() # calculate the change in position since last call
 		sz.theta_prev = sz.theta_curr
 
-		devins_constant = .00476991 #2091  # ratio of column motor rotation to change in column height. radians/meter
-		#devins_constant = .0042
-		#devins_constant = .006#2091  # ratio of column motor rotation to change in column height. radians/meter
+		devins_constant = .004667875 #2091  # ratio of column motor rotation to change in column height. radians/meter
 		
 		#devins_constant = .00955 #0.06/(2*3.14159)  # change in column height is 16 cm/rev of the column. 2.666 motor revs/column rev.  .06 cm/motor revs constants convert units to [cm/rad]
 
-		rotation = sz.get_sensor_readings()
+		#rotation = sz.get_sensor_readings()
+		rotation =sz.get_encoder_readings()
 		sz.L[0] = sz.L[0] + dtheta[0] * devins_constant #0.06/(2*3.14159)  #change in column height is 16 cm/rev of the column. 2.666 motor revs/column
-		sz.sensed_pos = sz.rotate(rotation[0],rotation[1],sz.L[0])
+		#sz.sensed_pos = sz.rotate(rotation[0],rotation[1],sz.L[0])
+		sz.sensed_pos = sz.rotate_encoder(rotation[0],rotation[1],sz.L[0])
 
 		sz.L = sz.cart2tether_actual(sz.sensed_pos)  #tether length update based on IMU only
 
@@ -268,6 +274,7 @@ class SpiralZipper:
 			return np.array(diff)*sz.radian_const # convert ticks to radians
 		else:
 			return [0.0,0.0,0.0,0.0]
+			# return [0.0,0.0,0.0]
 
 
 	def update_goal(sz,delta,mode):
@@ -340,8 +347,8 @@ class SpiralZipper:
 		t = np.dot(np.linalg.inv(M), X) 
 		virtual_point = np.array([[(x2[0] + x2unit[0] * t[1]), (x2[1] + x2unit[1] * t[1]), (x2[2] + x2unit[2] * t[1])]])
 
-		print "virtual point v1 "
-		print virtual_point
+		# print "virtual point v1 "
+		# print virtual_point
 
 		adjustment_factor = np.linalg.norm(OB) / np.linalg.norm(virtual_point - x2)
 
@@ -373,11 +380,19 @@ class SpiralZipper:
 		new_v = np.dot(R,v)
 
 		return new_v
+	    
+	def rotate_encoder(sz,yaw,pitch,r):
+            v = np.array([0,0,r])
+            R_yaw = np.array([[1,0,0],[0,m.cos(yaw),-m.sin(yaw)],[0,m.sin(yaw),m.cos(yaw)]])
+            R_pitch = np.array([[m.cos(pitch),0,m.sin(pitch)],[0,1,0],[-m.sin(pitch),0,m.cos(pitch)]])
+            R = np.dot(R_yaw,R_pitch)
+            new_v = np.dot(R,v)
+            return new_v
 	
 	def angle_between(sz, v1, v2): #gets angle between two input vectors
+
 		v1_u = v1/np.linalg.norm(v1) # unit vectors
 		v2_u = v2/np.linalg.norm(v2)
-
 		return np.arccos(np.dot(v1_u, v2_u))  
 
 	def get_sensor_readings(sz):
@@ -444,6 +459,37 @@ class SpiralZipper:
 		sz.ser_gyro.flushInput()
 		return l2
 
+	def get_encoder_readings(sz):
+            angle = []
+            startread = False
+            finishread = False
+            while (len(angle)!=2 or (not finishread)):
+                angle_reading = sz.ser_encoder.readline()
+                # print angle_reading
+                # sz.ser_encoder.flushInput()
+                angle = []
+                for t in reversed(angle_reading.split()):
+                    if t is ']':
+                        startread = True
+                        continue
+                    if(startread):
+                        if (t is '['):
+                            startread = False
+                            finishread = True
+                        else:
+                            try:
+                            	#print float(t)
+                                angle.append(float(t))
+                            except ValueError:
+                                pass
+                    if(finishread):
+                        break
+            angle = angle[::-1]
+            sz.ser_encoder.flushInput()
+            # print angle
+            return angle
+            
+
 	def get_lidar_readings(sz):  #reads lidar sensor data back
 		l = []
 		while (len(l) != 1):
@@ -471,7 +517,7 @@ class SpiralZipper:
 				sleep(0.05)
 			#print "LIDAR Readings:"
 			#print l
-		p = (l[0] * .001 + .02)
+		p = (l[0] * .001 + .035)
 		return np.array(p)
 
 	def sensed_lidar(sz):  #averages a set of 5 lidar readings
@@ -479,10 +525,11 @@ class SpiralZipper:
 		size = 10
 		for i in range(10):
 			read = sz.get_lidar_readings()        
-			if read < .12:  #throws away bad data
+			if read < .17:  #throws away bad data
 				read = 0
 				size = size - 1
 			avg = avg + read
+			print avg
 		avg = avg/size
 		return avg
 
@@ -589,8 +636,7 @@ class SpiralZipper:
 		sz.old_vel_error = error
 		#command_torques = [t1,t2,t3]
 		command_torques = [t1,t2,t3,t4]
-		#print "command_torques are: "
-		#print command_torques
+
 		for i in range(4):
 		#for i in range(3):  #check that scales speed commands that are too large down to something the system can manage. Good for position control/step inputs
 
@@ -624,6 +670,8 @@ class SpiralZipper:
 		if command_torques[0] > -.1 and command_torques[0] < -0.005:
 			command_torques[0] = -.1
 
+		print "command_torques are: "
+		print command_torques
  		#modification of the constants allows user to specify an extra torque input for the tethers when retracting.  this helps ensure the tethers never go slack.  Probably an obsolete command that can be removed.  Command also flips the sign to fit the system convention.
 		c.at.T1.set_torque(command_torques[0])
 		c.at.T2.set_torque(-command_torques[1])

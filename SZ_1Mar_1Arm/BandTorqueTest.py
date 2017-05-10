@@ -5,7 +5,7 @@ import matplotlib.animation as animation
 import threading
 import collections
 c = L.Cluster()
-c.populate()
+c.populate(4)
 
 command_torque = .75
 c.at.NxE4.set_torque(command_torque)

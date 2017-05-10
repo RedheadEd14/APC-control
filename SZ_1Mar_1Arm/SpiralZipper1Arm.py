@@ -25,7 +25,7 @@ from jacobian import jacobianMatrix
 
 # Specify module ID and the name we want to give each of them:
 #modules = {0xE4: 'T1',0xEA:'T2',0xDF:'T3'}#,0xF8:'T4',
-modules = {0xF8:'T1',0xF1:'T2', 0xF2:'T3',0xDF:'T4'}
+modules = {0xE4:'T1',0xEA:'T2', 0xDF:'T3',0xE3:'T4'}
 
 if __name__=="__main__":
 
@@ -84,7 +84,7 @@ if __name__=="__main__":
 	plt.show(block=False)
 
 	########### INITIALIZE ARMS ############
-	r_winch = 0.0199 #radius of the pulleys on the motors
+	r_winch = 0.0191 #radius of the pulleys on the motors
 	# r_winch = 0.0225 #radius of the pulleys on the motors
 
 	looptime = 0.1
@@ -93,13 +93,13 @@ if __name__=="__main__":
 
 	#### SETS VELOCITY CONTROL GAINS ####
 	Kp1 = 25 #proportional gains
-	Kp2 = 3
-	Kp3 = 3
+	Kp2 = 5
+	Kp3 = 5
 	Kp = [Kp1,Kp2,Kp3]
     
-	Ki1 = 1.25  #integral gains							
-	Ki2 = .3
-	Ki3 = .3
+	Ki1 = .1  #integral gains							
+	Ki2 = .025
+	Ki3 = .025
 	Ki = [Ki1,Ki2,Ki3]
 
 	Kd1 = 0.075
@@ -112,19 +112,19 @@ if __name__=="__main__":
 	sz1.set_Kd_Gains(Kd,0)
 
 	#### SETS POSITION CONTROL GAINS ####
-	Kp1 = 300 #proportional gains
-	Kp2 = 25
-	Kp3 = 25
+	Kp1 = 60 #proportional gains
+	Kp2 = 15
+	Kp3 = 15
 	Kp = [Kp1,Kp2,Kp3]
     
-	Ki1 = 5  #integral gains
-	Ki2 = 10.
-	Ki3 = 10.
+	Ki1 = 0  #integral gains
+	Ki2 = 0
+	Ki3 = 0
 	Ki = [Ki1,Ki2,Ki3]
 
-	Kd1 = 1.5
-	Kd2 = 6
-	Kd3 = 6
+	Kd1 = 0
+	Kd2 = 0
+	Kd3 = 0
 	Kd = [Kd1,Kd2,Kd3]
 
 	sz1.set_Kp_Gains(Kp,1)
@@ -176,8 +176,10 @@ if __name__=="__main__":
 						elif evt.button is 1: #Reinitializes outer loop control using the IMU.
 							#sz1.slack_removal(c)
 							#sz1.L[0] = sz1.sensed_lidar()
-							rotation = sz1.get_sensor_readings()
-							sz1.sensed_pos = sz1.rotate(rotation[0],rotation[1],sz1.L[0])
+							#rotation = sz1.get_sensor_readings()
+							#sz1.sensed_pos = sz1.rotate(rotation[0],rotation[1],sz1.L[0])
+							rotation = sz1.get_encoder_readings()
+							sz1.sensed_pos = sz1.rotate_encoder(rotation[0],rotation[1],sz1.L[0])
 							sz1.L = sz1.cart2tether_actual(sz1.sensed_pos)  #tether length update based on IMU only
 							sz1.goal = sz1.sensed_pos
 							sz1.sensed_pos_prev = sz1.goal
@@ -229,6 +231,8 @@ if __name__=="__main__":
 						else:
 							raise KeyboardInterrupt
 				if drivable:
+
+				##################
 					sz1.update_state(c)
 					
 					######################## ROBOT STATE MACHINE ##############################
@@ -248,31 +252,31 @@ if __name__=="__main__":
 					if flag == 0: #BAD AND EVIL FLAG. Flag is only 1 when the system is in trajectory mode.
 						sz1.set_tether_speeds(mode) 
 
-					#sz1.actuate_Motors(c,remote_or_auto) 
+					sz1.actuate_Motors(c,remote_or_auto) 
 				
 					####################### DATA MONITORING #################################
 
-					# sensed_grav = sz1.get_sensor_readings() 
+					sensed_grav = sz1.get_encoder_readings()
 					# while (sensed_grav[0] == 0 and sensed_grav[1] == 0 and sensed_grav[2] == 0):
-					# 	sensed_grav = sz1.get_sensor_readings() #takes the average of a set of IMU readings
-					# 	print sensed_grav
-					# sensed_pos = sz1.rotate(sensed_grav[0], sensed_grav[1],sz1.L[0])
+					# 	sensed_grav = sz1.get_encoder_readings() #takes the average of a set of IMU readings
+						# print sensed_grav
+					sensed_pos = sz1.rotate_encoder(sensed_grav[0], sensed_grav[1],sz1.L[0])
 
-					# velocity_measured = (sensed_pos -sensed_pos_prev) / sz1.looptime
-					# sensed_pos_prev = sensed_pos
+					velocity_measured = (sensed_pos -sensed_pos_prev) / sz1.looptime
+					sensed_pos_prev = sensed_pos
 
 
-					#j_velocity = sz1.Jacobian_Math(sensed_pos)
-					#print "Jacobian velocity is : "
-					#print np.squeeze(j_velocity)
+					# j_velocity = sz1.Jacobian_Math(sensed_pos)
+					# print "Jacobian velocity is : "
+					# print np.squeeze(j_velocity)
 
-					#print "measured velocity is "
-					#print velocity_measured
+					# print "measured velocity is "
+					# print velocity_measured
 
-					print "position is "
-					print sz1.sensed_pos
-					print "goal is"
-					print sz1.goal
+					# print "position is "
+					# print sz1.sensed_pos
+					# print "goal is"
+					# print sz1.goal
 
 					
 					# print "arm tether velocities: "
@@ -282,8 +286,8 @@ if __name__=="__main__":
 					#print end_effector_pos
 
 
-					# print "current tether lengths : "
-					# print sz1.L
+					print "current tether lengths : "
+					print sz1.L
 
 					# print "arm tether velocities: "
 					# print sz1.L_vel_actual
@@ -294,8 +298,8 @@ if __name__=="__main__":
 						   c.at.T2.get_torque(), 
 						   c.at.T3.get_torque()]
 
-					print "Torques are: "
-					print Torques
+					# print "Torques are: "
+					# print Torques
 
 					########## Graphing ###########
 					# updates liveplots based on IMU data and desired inputs.
@@ -306,12 +310,12 @@ if __name__=="__main__":
 					y1darray.append(sz1.goal[0])
 					y2darray.append(sz1.goal[1])
 					y3darray.append(sz1.goal[2])
-					'''y1array.append(sz1.L_vel_actual[1])
-					y2array.append(sz1.L_vel_actual[2])
-					y3array.append(sz1.L_vel_actual[3])
-					y1darray.append(sz1.L_vel_desired[1])
-					y2darray.append(sz1.L_vel_desired[2])
-					y3darray.append(sz1.L_vel_desired[3])'''
+					# '''y1array.append(sz1.L_vel_actual[1])
+					# y2array.append(sz1.L_vel_actual[2])
+					# y3array.append(sz1.L_vel_actual[3])
+					# y1darray.append(sz1.L_vel_desired[1])
+					# y2darray.append(sz1.L_vel_desired[2])
+					# y3darray.append(sz1.L_vel_desired[3])'''
 					if len(xarray) > 200:
 						xarray.popleft()
 						y1array.popleft()
