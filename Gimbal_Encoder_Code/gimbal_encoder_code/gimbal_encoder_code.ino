@@ -9,11 +9,11 @@ void setup()
 {
   Serial.begin(57600);
   angleSensor.init();
-  angleSensor.setZeroPosition(0x1B14);
+  angleSensor.setZeroPosition(0x1B14); //for arm 1 of APC base
   angleSensor.close();// close after each init to allow spi to start again
   
   angleSensor2.init();// i made the clock 10Mhz. it was 1Mhz to star
-  angleSensor2.setZeroPosition(0x21E);
+  angleSensor2.setZeroPosition(0x248); //for arm 1 of APC base
   angleSensor2.close();// close after each init to allow spi to start again
 }
 int dt = 0;
@@ -28,7 +28,7 @@ void loop()
 //  Serial.print("Sen_1 : ");
 //  Serial.println(val, HEX);
 //  Serial.print("Sen_1: ");
-  //Serial.println(val);
+//  Serial.println(val);
   double pos = angleSensor.getRotation();
   pos = (pos/16384) * 2 * 3.1415926535;
   //Serial.print("absolute orientation of sensor 1 is : ");
@@ -38,7 +38,7 @@ void loop()
 //Serial.print(" : Errors: ");
 //Serial.println(angleSensor.getErrors());
 angleSensor.getErrors();
-//
+
 //  word val2 = angleSensor2.getRawRotation();
 //  Serial.print("Sen_2: ");
 //  Serial.println(val2,HEX);

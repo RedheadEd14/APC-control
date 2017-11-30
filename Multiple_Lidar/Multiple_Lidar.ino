@@ -20,15 +20,16 @@ void setup()
 
   sensor.setMeasurementTimingBudget(100000);
   sensor.setAddress((uint8_t)22);
-  sensor.startContinuous();
+//  sensor.startContinuous();
 }
 
 void loop()
 {
 
   Serial.print("$ ");
-  Serial.print(float(sensor.readRangeContinuousMillimeters()));
+  Serial.print(float(sensor.readRangeSingleMillimeters()));
   //if (sensor.timeoutOccurred()) { Serial.print(" TIMEOUT"); }
   Serial.print(" ");
   Serial.println(" #");
+  delay(1000);
 }

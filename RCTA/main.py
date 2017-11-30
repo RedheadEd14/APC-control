@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 '''
-Set up and control a diff drive robot using a joystick
-
 I recommend running this code in ipython via:
->> execfile('demo_diffdrive.py')
+>> run main.py
+or in python  via:
+>>python main.py
+AAAAAARRGH!!!
 '''
 # Import pygame, which handles joysticks and other inputs
 import pygame
@@ -16,16 +17,12 @@ from numpy import pi
 import math
 import sys
 import numpy as np
-import spiral_zipper_1Arm as sz
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import threading
-import collections
+import function_header as sz
 from jacobian import jacobianMatrix
 
 # Specify module ID and the name we want to give each of them:
 #modules = {0xE4: 'T1',0xEA:'T2',0xDF:'T3'}#,0xF8:'T4',
-modules = {0xF8:'T1',0xEA:'T2', 0xDF:'T3'}#,0xE4:'T1'}
+modules = {0x02:'T3',0x01:'T4'}#,0xE7:'T2'
 
 if __name__=="__main__":
 
@@ -33,17 +30,14 @@ if __name__=="__main__":
 
 	##### INITIALIZE CKBOT CLUSTER ###########
 	if len(sys.argv) == 2:
-		modules = {int(sys.argv[1]) : 'T1', int(sys.argv[2]) : 'T2', int(sys.argv[3]) : 'T3'}#,int(sys.argv[4]) : 'T4'}
+		modules = {int(sys.argv[2]) : 'T3',int(sys.argv[4]) : 'T4'}
 	c = L.Cluster()
 	c.populate( len(modules), modules )
 
 	# Limit module speed and torque for safety
-	torque_limit = 0.75
-	for m in c.itermodules():
-		m.set_torque_limit( torque_limit )
-		# If module is a servo, then also limit speed
-		if not m.get_mode():
-			m.set_speed( 10.0 )
+	# torque_limit = 0.95
+	# for m in c.itermodules():
+	# 	m.set_torque_limit( torque_limit )
 
 	##### INITIALIZE REMOTE CONTROLLER ######
 	pygame.init()
@@ -61,80 +55,32 @@ if __name__=="__main__":
 	z1_flag = False 
 	z2_flag = False
 
-	##### LIVE PLOT INITIALIZATION  #####
- 	fig = plt.figure()
-	ax = fig.add_subplot(111)
-
-	y1array = collections.deque([None] * 200, maxlen=200)
-	y2array = collections.deque([None] * 200, maxlen=200)
-	y3array = collections.deque([None] * 200, maxlen=200)
-	y1darray = collections.deque([None] * 200, maxlen=200)
-	y2darray = collections.deque([None] * 200, maxlen=200)
-	y3darray = collections.deque([None] * 200, maxlen=200)
-	xarray = collections.deque([None] * 200, maxlen=200)
-
-	l1, = ax.plot(xarray, y1array, 'r-', label = "sensed x")
-	l2, = ax.plot(xarray, y2array, 'b-', label = "sensed y")
-	l3, = ax.plot(xarray, y3array, 'g-', label = "sensed z")
-	l1d, = ax.plot(xarray, y1darray, 'r--', label = "desired x")
-	l2d, = ax.plot(xarray, y2darray, 'b--', label = "desired y")
-	l3d, = ax.plot(xarray, y3darray, 'g--', label = "desired z")
-	plt.legend(bbox_to_anchor=(.8, .9), loc=2, borderaxespad=0.)
-	fig.canvas.draw()
-	plt.show(block=False)
-
 	########### INITIALIZE ARMS ############
-	r_winch = 0.0191 #radius of the pulleys on the motors
+	r_winch = 0.019 #radius of the pulleys on the motors
 	# r_winch = 0.0225 #radius of the pulleys on the motors
 
 	looptime = 0.1
 
 	sz1 = sz.SpiralZipper(r_winch, c, looptime)
+	sz1.plot_update()
+	#### SETS VELOCITY CONTROL GAINS [T1, T2, T3] ####
+	Kp = [4, 10, 1.875]  #proporional gains 
+	Ki = [1, 0.01, 0.075] #integral gains
+	Kd = [0, 0.1, 0.175] #derivative gains
 
-	#### SETS VELOCITY CONTROL GAINS ####
-	Kp1 = 25 #proportional gains
-	Kp2 = 5
-	Kp3 = 5
-	Kp = [Kp1,Kp2,Kp3]
-    
-	Ki1 = .1  #integral gains							
-	Ki2 = .025
-	Ki3 = .025
-	Ki = [Ki1,Ki2,Ki3]
+	sz1.set_PID_Gains(Kp,Ki,Kd,0)
 
-	Kd1 = 0.075
-	Kd2 = 0.075
-	Kd3 = 0.075
-	Kd = [Kd1,Kd2,Kd3]
+	#### SETS POSITION CONTROL GAINS [T1, T2, T3] ####
+	Kp = [60, 15, 15] #proportional gains
+	Ki = [0, 0, 0] #integral gains
+	Kd = [0, 0, 0] #derivative gains
 
-	sz1.set_Kp_Gains(Kp,0)
-	sz1.set_Ki_Gains(Ki,0)
-	sz1.set_Kd_Gains(Kd,0)
-
-	#### SETS POSITION CONTROL GAINS ####
-	Kp1 = 60 #proportional gains
-	Kp2 = 15
-	Kp3 = 15
-	Kp = [Kp1,Kp2,Kp3]
-    
-	Ki1 = 0  #integral gains
-	Ki2 = 0
-	Ki3 = 0
-	Ki = [Ki1,Ki2,Ki3]
-
-	Kd1 = 0
-	Kd2 = 0
-	Kd3 = 0
-	Kd = [Kd1,Kd2,Kd3]
-
-	sz1.set_Kp_Gains(Kp,1)
-	sz1.set_Ki_Gains(Ki,1)
-	sz1.set_Kd_Gains(Kd,1)
+	sz1.set_PID_Gains(Kp,Ki,Kd,1)
 
 	#### SETS JOYSTICK INPUT GAINS ####
 	Kx = 0.05 
 	Ky = 0.05
-	Kz = 0.005
+	Kz = 0.01
 
 	#end_effector_old = np.matrix([[.25],[0],[.4]])
 	#end_effector_des = np.matrix([[.25],[0],[.4]])
@@ -174,7 +120,6 @@ if __name__=="__main__":
 							sz1.update_goal([0,0,0],mode)
 
 						elif evt.button is 1: #Reinitializes outer loop control using the IMU.
-							#sz1.slack_removal(c)
 							#sz1.L[0] = sz1.sensed_lidar()
 							#rotation = sz1.get_sensor_readings()
 							#sz1.sensed_pos = sz1.rotate(rotation[0],rotation[1],sz1.L[0])
@@ -186,84 +131,85 @@ if __name__=="__main__":
 
 						elif evt.button is 2: #sets a desired position in Position control mode
 							mode = 1 
-							sz1.update_goal([-.1, 0, .4],mode) 
+							sz1.update_goal([-.1, 0, .35],mode) 
 
 						elif evt.button is 3: #triggers velocity control
 							initial_time = now()
 							flag = not flag
 
-						elif evt.button is 4: #arm 1 up in Velocity control mode
-							z1_flag = not z1_flag
-							if z1_flag:
-								z1_move = 1
-							else:
-								z1_move = 0
+						# elif evt.button is 4: #arm 1 up in Velocity control mode
+						# 	z1_flag = not z1_flag
+						# 	sz1.slack_removal(c)
 
-						elif evt.button is 6: #arm 1 down in Velocity control mode
-							z1_flag = not z1_flag
-							if z1_flag:
-								z1_move = -1
-							else:
-								z1_move = 0
+						# 	if z1_flag:
+						# 		z1_move = 1
+						# 	else:
+						# 		z1_move = 0
 
-						elif evt.button is 5: #arm 2 up in Velocity control mode
-							z2_flag = not z2_flag
-							if z2_flag:
-								z2_move = 1
-							else:
-								z2_move = 0
+						# elif evt.button is 6: #arm 1 down in Velocity control mode
+						# 	z1_flag = not z1_flag
+						# 	if z1_flag:
+						# 		z1_move = -1
+						# 	else:
+						# 		z1_move = 0
 
-						elif evt.button is 7: #arm 2 down in Velocity control mode
-							z2_flag = not z2_flag
-							if z2_flag == True:
-								z2_move = -1
-							else:
-								z2_move = 0
+						# elif evt.button is 5: #arm 2 up in Velocity control mode
+						# 	z2_flag = not z2_flag
+						# 	if z2_flag:
+						# 		z2_move = 1
+						# 	else:
+						# 		z2_move = 0
+
+						# elif evt.button is 7: #arm 2 down in Velocity control mode
+						# 	z2_flag = not z2_flag
+						# 	if z2_flag == True:
+						# 		z2_move = -1
+						# 	else:
+						# 		z2_move = 0
 
 						elif evt.button is 8: #sets a desired position in Position control mode
 							mode = 1
-							sz1.update_goal([0, -0.1,0.6],mode) 
+							sz1.update_goal([0, -0.1,0.35],mode) 
 
 						elif evt.button is 9: #sets a desired position in Position control mode
 							mode = 1 
-							sz1.update_goal([0, 0.1,0.5],mode) 
+							sz1.update_goal([0, 0.1,0.35],mode) 
 
 						else:
 							raise KeyboardInterrupt
 				if drivable:
 
-				##################
 					sz1.update_state(c)
 					
 					######################## ROBOT STATE MACHINE ##############################
 					if mode == 0: #Velocity control 
 						
-						if flag == 1: #BAD AND EVIL FLAG.  set flag bypasses user input velocity commands for a set path using the velocity controller
+						if flag == 1: #BAD AND EVIL FLAG.  set flag that bypasses user input velocity commands for a precomputed path using the velocity controller
 							sz1.trajectory(initial_time)
 						else :
-							Kx = (sz1.L[0] * .03 + .005)
+							Kx = (sz1.L[0] * .05 + .001)
 							Ky = Kx
-							sz1.update_goal([-x2_move*Kx,y2_move*Ky,z2_move*Kz],mode)
+							sz1.update_goal([x2_move*Kx,-y2_move*Ky,y1_move*Kz],mode)
 						remote_or_auto = 0  	#flag toggles features in the functions called below that are calibrated to the two different controllers
 
 					else: #When arm is in position mode
 						remote_or_auto = 1		
 
-					if flag == 0: #BAD AND EVIL FLAG. Flag is only 1 when the system is in trajectory mode.
+					if flag == 0: #BAD AND EVIL FLAG. Flag is only 1 when the system is in precomputed trajectory mode.
 						sz1.set_tether_speeds(mode) 
 
 					sz1.actuate_Motors(c,remote_or_auto) 
 				
 					####################### DATA MONITORING #################################
 
-					sensed_grav = sz1.get_encoder_readings()
-					# while (sensed_grav[0] == 0 and sensed_grav[1] == 0 and sensed_grav[2] == 0):
-					# 	sensed_grav = sz1.get_encoder_readings() #takes the average of a set of IMU readings
-						# print sensed_grav
-					sensed_pos = sz1.rotate_encoder(sensed_grav[0], sensed_grav[1],sz1.L[0])
+					# sensed_grav = sz1.get_encoder_readings()
+					# # while (sensed_grav[0] == 0 and sensed_grav[1] == 0 and sensed_grav[2] == 0):
+					# # 	sensed_grav = sz1.get_encoder_readings() #takes the average of a set of IMU readings
+					# 	# print sensed_grav
+					# sensed_pos = sz1.rotate_encoder(sensed_grav[0], sensed_grav[1],sz1.L[0])
 
-					velocity_measured = (sensed_pos -sensed_pos_prev) / sz1.looptime
-					sensed_pos_prev = sensed_pos
+					# velocity_measured = (sz1.sensed_pos -sz1.sensed_pos_prev) / sz1.looptime
+					# sensed_pos_prev = sz1.sensed_pos
 
 
 					# j_velocity = sz1.Jacobian_Math(sensed_pos)
@@ -273,8 +219,8 @@ if __name__=="__main__":
 					# print "measured velocity is "
 					# print velocity_measured
 
-					# print "position is "
-					# print sz1.sensed_pos
+					print "position is "
+					print sz1.sensed_pos
 					# print "goal is"
 					# print sz1.goal
 
@@ -292,7 +238,7 @@ if __name__=="__main__":
 					# print "arm tether velocities: "
 					# print sz1.L_vel_actual
 					#print "arm 1 desired tether velocities: "			
-					# #print sz1.L_vel_desired
+					#print s z1.L_vel_desired
 
 					# Torques = [c.at.T1.get_torque(), 
 					# 	   c.at.T2.get_torque(), 
@@ -303,48 +249,14 @@ if __name__=="__main__":
 
 					########## Graphing ###########
 					# updates liveplots based on IMU data and desired inputs.
-					xarray.append(now())  
-					y1array.append(sz1.sensed_pos[0])
-					y2array.append(sz1.sensed_pos[1])
-					y3array.append(sz1.sensed_pos[2])
-					y1darray.append(sz1.goal[0])
-					y2darray.append(sz1.goal[1])
-					y3darray.append(sz1.goal[2])
-					# '''y1array.append(sz1.L_vel_actual[1])
-					# y2array.append(sz1.L_vel_actual[2])
-					# y3array.append(sz1.L_vel_actual[3])
-					# y1darray.append(sz1.L_vel_desired[1])
-					# y2darray.append(sz1.L_vel_desired[2])
-					# y3darray.append(sz1.L_vel_desired[3])'''
-					if len(xarray) > 200:
-						xarray.popleft()
-						y1array.popleft()
-						y2array.popleft()
-						y3array.popleft()
-						y3darray.popleft()
-						y2darray.popleft()
-						y1darray.popleft()
-					l1.set_xdata(xarray)
-					l1.set_ydata(y1array)
-					l2.set_xdata(xarray)
-					l2.set_ydata(y2array)
-					l3.set_xdata(xarray)
-					l3.set_ydata(y3array)
-
-					l1d.set_xdata(xarray)
-					l1d.set_ydata(y1darray)
-					l2d.set_xdata(xarray)
-					l2d.set_ydata(y2darray)
-					l3d.set_xdata(xarray)
-					l3d.set_ydata(y3darray)
-
-					ax.relim() 
-					ax.autoscale_view(True,True,True)
-					fig.canvas.draw()
+					sz1.plot_update()
+					
 				else:
 					for m in c.itermodules():
 						m.set_torque(0) #not go_slack - causes arm to collapse
 		#send 
+						if m == 2:
+							m.set_torque_mx(0)
 		except KeyboardInterrupt or ValueError:
 			# Break out of the loop
 			print "Keyboard Interrupt detected"
@@ -366,6 +278,8 @@ if __name__=="__main__":
 		m.set_torque(0)
 
 	print "Closing all data files..."
+	sz1.closing_function()
+
 	# sz1.data_store_measurement.close()
 	# sz1.data_store_estimate.close()
 	# sz1.data_store_predict.close()

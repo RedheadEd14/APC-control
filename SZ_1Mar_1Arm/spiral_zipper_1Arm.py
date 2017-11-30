@@ -25,15 +25,14 @@ class SpiralZipper:
 		sz.Lold = [0,0,0,0]
 
 		got_port = [1, 1]
-		ser = [0, 0]
 		try:
-			ser[0] = serial.Serial('/dev/ttyACM0', 57600)
+			sz.ser_encoder = serial.Serial('/dev/ttyACM0', 57600)
 		except Exception, e:
 			print "No Arduino on ACM0"
 			print str(e)
 			got_port[0] = 0
 		try:
-			ser[1] = serial.Serial('/dev/ttyACM1', 57600)
+			sz.ser_encoder = serial.Serial('/dev/ttyACM1', 57600)
 		except Exception, e:
 			print "No Arduino on ACM1"
 			print str(e)
@@ -44,41 +43,43 @@ class SpiralZipper:
 		# 	print "No Arduino on ACM2"
 		# 	print str(e)
 		# 	sgot_port[2] = 0
-		for port in range(2):
-			if got_port[port]:
-				figuredout_LIDAR = False
-				figuredout_GYRO = False
-				figuredout_ENCODER = False
-				while (not figuredout_LIDAR and not figuredout_ENCODER):  #not figuredout_LIDAR1 and 
-					bytesToRead = ser[port].inWaiting()
-					readings = ser[port].read(bytesToRead)
-					for t in reversed(readings.split()):  # read from most recent serial data
+		# for port in range(2):
+		# 	if got_port[port]:
+		# 		figuredout_LIDAR = False
+		# 		figuredout_GYRO = False
+		# 		figuredout_ENCODER = False
+		# 		while (not figuredout_LIDAR and not figuredout_ENCODER):  #not figuredout_LIDAR1 and 
+		# 			bytesToRead = ser[port].inWaiting()
+		# 			readings = ser[port].read(bytesToRead)
+		# 			for t in reversed(readings.split()):  # read from most recent serial data
 						
-						if(t is '#' or t is '$'):
-							sz.ser_lidar = ser[port]
-							figuredout_LIDAR = True
-							print "Port %d is LIDAR" % port
-							break
-						elif (t is ']' or t is '[' ):# or t is '}' or t is '{'):
-							#sz.ser_gyro = ser[port]
-							sz.ser_encoder = ser[port]
-							#figuredout_GYRO = True
-   							figuredout_ENCODER = True
-							#print "Port %d is GYRO" % port
-							print "Port %d is encoder" % port
-							break
-						else:
-							print "Undecided..."
-					# ser[port].flushInput()
+		# 				if(t is '#' or t is '$'):
+		# 					sz.ser_lidar = ser[port]
+		# 					figuredout_LIDAR = True
+		# 					print "Port %d is LIDAR" % port
+		# 					break
+		# 				elif (t is ']' or t is '[' ):# or t is '}' or t is '{'):
+		# 					#sz.ser_gyro = ser[port]
+		# 					sz.ser_encoder = ser[port]
+		# 					#figuredout_GYRO = True
+  #  							figuredout_ENCODER = True
+		# 					#print "Port %d is GYRO" % port
+		# 					print "Port %d is encoder" % port
+		# 					break
+		# 				else:
+		# 					print "Undecided..."
+		# 			# ser[port].flushInput()
 	
-			else:
-				print "Nothing on port %d" % port
+		# 	else:
+		# 		print "Nothing on port %d" % port
 
 
 		'''except serial.SerialException:
 		sz.ser = serial.Serial('/dev/ttyACM1', 9600)'''
 		sleep(1)
-
+		sleep(1)
+		if sz.ser_encoder.isOpen():
+			print "Port Open"
 		#control loop speed to be enforced
 		sz.looptime = looptime  
 		sz.timeold = 0
@@ -90,7 +91,7 @@ class SpiralZipper:
 		sz.radian_const = 0.06*np.pi/180
 
 		#initializes robot geometric parameters. Constant
-		sz.rb = 0.235          # circle inscribing the spiral zipper motors #.22 for the APC arm, .11 for the RCTA arm
+		sz.rb = 0.3          # circle inscribing the spiral zipper motors #.22 for the APC arm, .11 for the RCTA arm
 		sz.rt = 0.0695  	   # diameter of the spiral zipper column
 		sz.r_winch = r_winch   # the radius of the winch used to wind tether.
 		phi = 30 * pi/180
@@ -98,8 +99,8 @@ class SpiralZipper:
 
 		# positions of the motors in xyz
 		p1 = (sz.rb + .01)*np.array([0,1, 0]) + np.array([0,0,.11])  
-		p2 = sz.rb*np.array([np.cos(phi),-np.sin(phi), 0]) + np.array([0,0,.11])
-		p3 = sz.rb*np.array([-np.cos(phi),-np.sin(phi), 0]) + np.array([0,0,.11])
+		p2 = sz.rb*np.array([np.cos(phi),-np.sin(phi), 0]) + np.array([0,0, 0])
+		p3 = sz.rb*np.array([-np.cos(phi),-np.sin(phi), 0]) + np.array([0,0, 0])
 		sz.p = [p1,p2,p3]
 
 		# tether attachment points on the end effector assuming arm is straight upsz.OB
@@ -126,8 +127,8 @@ class SpiralZipper:
 		theta1 = c.at.T1.get_pos()
 		theta2 = c.at.T2.get_pos()
 		theta3 = c.at.T3.get_pos()
-		theta4 = c.at.T4.get_pos()
-		sz.theta0 = [theta1,theta2,theta3,theta4] # initial encoder positions of the motors
+		# theta4 = c.at.T4.get_pos()
+		sz.theta0 = [theta1,theta2,theta3] # initial encoder positions of the motors
 		sz.theta_prev = sz.theta0 # used to update delta position
 		sz.theta_curr = sz.theta0 # will hold the current theta of the system
 
@@ -160,7 +161,7 @@ class SpiralZipper:
 		c.at.T1.set_torque(0)
 		c.at.T2.set_torque(0)
 		c.at.T3.set_torque(0)
-		c.at.T4.set_torque(0)
+		# c.at.T4.set_torque(0)
 
 	def vacuum_cleaner(sz):  #sends a command to the arduino that controls the vacuum.  Toggles it on and off
 		sz.ser_lidar.write("r")
@@ -209,13 +210,16 @@ class SpiralZipper:
 
 	def update_state (sz, c):
 		#This function updates the position of the system based on encoder data and the IMU.
-		
+		hangtime = now()
 		theta1 = c.at.T1.get_pos()
 		theta2 = c.at.T2.get_pos()
 		theta3 = c.at.T3.get_pos()
-		theta4 = c.at.T4.get_pos()
-		#theta_reading = [theta1,theta2,theta3]
-		theta_reading = [theta1,theta2,theta3,theta4]
+		totalhangtime = now()-hangtime
+		print "sensor hangtime is: " 
+		print totalhangtime
+		# theta4 = c.at.T4.get_pos()
+		theta_reading = [theta1,theta2,theta3]
+		# theta_reading = [theta1,theta2,theta3,theta4]
 	
 		# print "motor theta readings:"
 		# print theta1
@@ -243,7 +247,7 @@ class SpiralZipper:
 		#sz.L[3] = sz.L[3] - dtheta[2]*sz.r_winch
 
 		sz.L_vel_actual[0] = (dtheta[0] * devins_constant) / sz.looptime #gets the current speed of the system from encoder data
-		sz.L_vel_actual[1] = (-dtheta[3] * sz.r_winch) / sz.looptime
+		# sz.L_vel_actual[1] = (-dtheta[3] * sz.r_winch) / sz.looptime
 		sz.L_vel_actual[2] = (-dtheta[1] * sz.r_winch) / sz.looptime
 		sz.L_vel_actual[3] = (-dtheta[2] * sz.r_winch) / sz.looptime
 
@@ -253,9 +257,9 @@ class SpiralZipper:
 		#get current readings
 		#Assume the current value of the sensor is stored and the previous value is correct.
 		timeelapsed = now() - sz.timeold
-		diff = [0.0,0.0,0.0,0.0]
-		#diff = [0.0, 0.0]
-		for i in range(4):
+		# diff = [0.0,0.0,0.0,0.0]
+		diff = [0.0, 0.0, 0.0]
+		for i in range(3):
 			diff[i] = sz.theta_curr[i]-sz.theta_prev[i]
 			if abs(diff[i])>sz.limit_t: #calculate valid delta and switch signs to be correct direction
 				if sz.theta_curr[i] >= sz.theta_prev[i]:# diff is +ve, so the solution should be -ve
@@ -273,8 +277,8 @@ class SpiralZipper:
 		if timeelapsed < .2:
 			return np.array(diff)*sz.radian_const # convert ticks to radians
 		else:
-			return [0.0,0.0,0.0,0.0]
-			# return [0.0,0.0,0.0]
+			# return [0.0,0.0,0.0,0.0]
+			return [0.0,0.0,0.0]
 
 
 	def update_goal(sz,delta,mode):
@@ -460,35 +464,72 @@ class SpiralZipper:
 		return l2
 
 	def get_encoder_readings(sz):
-            angle = []
-            startread = False
-            finishread = False
-            while (len(angle)!=2 or (not finishread)):
-                angle_reading = sz.ser_encoder.readline()
-                # print angle_reading
-                # sz.ser_encoder.flushInput()
-                angle = []
-                for t in reversed(angle_reading.split()):
-                    if t is ']':
-                        startread = True
-                        continue
-                    if(startread):
-                        if (t is '['):
-                            startread = False
-                            finishread = True
-                        else:
-                            try:
-                            	#print float(t)
-                                angle.append(float(t))
-                            except ValueError:
-                                pass
-                    if(finishread):
-                        break
-            angle = angle[::-1]
-            sz.ser_encoder.flushInput()
-            # print angle
-            return angle
-            
+		angle = []
+		startread = False
+		finishread = False
+		sz.ser_encoder.write("i")
+		sleep(.002)
+		# if(arduino.inWaiting() > 0):
+			#     angle = sz.ser_encoder.readline()            
+		while (len(angle)!=2 or (not finishread)):
+			angle_reading = sz.ser_encoder.readline()
+			# print angle_reading
+			# sz.ser_encoder.flushInput()
+			angle = []
+			for t in reversed(angle_reading.split()):
+				if t is ']':
+					startread = True
+					continue
+				if(startread):
+					if (t is '['):
+						startread = False
+						finishread = True
+					else:
+						try:
+							#print float(t)
+							angle.append(float(t))
+						except ValueError:
+							pass
+				if(finishread):
+					break
+		angle = angle[::-1]
+		sz.ser_encoder.flushInput()
+		# print angle
+		return angle
+    # def get_stringpot_readings(sz):
+	   #   length = []
+    #     startread = False
+    #     finishread = False
+    #     sz.ser_encoder.write("p")
+    #     sleep(.002)
+    #     # if(arduino.inWaiting() > 0):
+    #    	#     angle = sz.ser_encoder.readline()            
+    #     while (len(angle)!=2 or (not finishread)):
+    #         length_reading = sz.ser_encoder.readline()
+    #         # print angle_reading
+    #         # sz.ser_encoder.flushInput()
+    #         length = []
+    #         for t in reversed(length_reading.split()):
+    #             if t is ']':
+    #                 startread = True
+    #                 continue
+    #             if(startread):
+    #                 if (t is '['):
+    #                     startread = False
+    #                     finishread = True
+    #                 else:
+    #                     try:
+    #                     	#print float(t)
+    #                         length.append(float(t))
+    #                     except ValueError:
+    #                         pass
+    #             if(finishread):
+    #                 break
+    #     length = length[::-1]
+    #     sz.ser_encoder.flushInput()
+    #     # print angle
+    #     return length
+
 
 	def get_lidar_readings(sz):  #reads lidar sensor data back
 		l = []
@@ -496,8 +537,8 @@ class SpiralZipper:
 			#bytesToRead = sz.ser_lidar1.inWaiting()
 			#readings = sz.ser_lidar1.read(bytesToRead)
 			#sz.ser_lidar1.flushInput()
-			sleep(.1)
-			readings = sz.ser_lidar.readline()
+			# sleep(.1)
+			readings = sz.ser_encoder.readline()
 			l = []
 			startread = False
 			for t in reversed(readings.split()):  # read from most recent serial data
@@ -513,24 +554,27 @@ class SpiralZipper:
 						except ValueError:
 							pass
 			l = l[::-1]  # Reverse readings to get in [x y z] order
-			if (len(l) != 1):
-				sleep(0.05)
-			#print "LIDAR Readings:"
-			#print l
+			# if (len(l) != 1):
+				# sleep(0.05)
+			# print "LIDAR Readings:"
+			# print l
 		p = (l[0] * .001 + .035)
 		return np.array(p)
 
 	def sensed_lidar(sz):  #averages a set of 5 lidar readings
 		avg = 0				
 		size = 10
+		sz.ser_encoder.write("j")
+		# sleep(.1)
 		for i in range(10):
 			read = sz.get_lidar_readings()        
 			if read < .17:  #throws away bad data
 				read = 0
 				size = size - 1
 			avg = avg + read
-			print avg
 		avg = avg/size
+		print "lidar arm length: "
+		print avg
 		return avg
 
 	def PID_pos_control(sz,remote_or_auto): #position PID control
@@ -676,7 +720,7 @@ class SpiralZipper:
 		c.at.T1.set_torque(command_torques[0])
 		c.at.T2.set_torque(-command_torques[1])
 		c.at.T3.set_torque(-command_torques[2])
-		c.at.T4.set_torque(-command_torques[3])
+		# c.at.T4.set_torque(-command_torques[3])
 
 	def trajectory(sz,itime):
 		ftime = itime + 10
@@ -686,12 +730,13 @@ class SpiralZipper:
 		y = sz.sensed_pos_prev[1]
 		z = sz.sensed_pos_prev[2]
 
-		r = np.sqrt(x**2 + y**2) + .0001
+		r = np.sqrt(x**2 + y**2)# + .0001
 		theta = m.atan2(y,x)
 		thetagoal = theta + .2*z
 
 		x = r*m.cos(thetagoal)
 		y=  r*m.sin(thetagoal)
+		z = z + .001
 		sz.goal = [x,y,z]
 		sz.sensed_pos_prev = sz.goal
 
