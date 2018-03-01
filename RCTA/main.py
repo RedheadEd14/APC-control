@@ -64,8 +64,8 @@ if __name__=="__main__":
 	sz1 = sz.SpiralZipper(r_winch, c, looptime)
 	sz1.plot_update()
 	#### SETS VELOCITY CONTROL GAINS [T1, T2, T3] ####
-	Kp = [4, 10, 1.875]  #proporional gains 
-	Ki = [1, 0.01, 0.075] #integral gains
+	Kp = [10, 10, 1.875]  #proporional gains 
+	Ki = [0, 0.01, 0.075] #integral gains
 	Kd = [0, 0.1, 0.175] #derivative gains
 
 	sz1.set_PID_Gains(Kp,Ki,Kd,0)
@@ -80,7 +80,7 @@ if __name__=="__main__":
 	#### SETS JOYSTICK INPUT GAINS ####
 	Kx = 0.05 
 	Ky = 0.05
-	Kz = 0.01
+	Kz = 0.02
 
 	#end_effector_old = np.matrix([[.25],[0],[.4]])
 	#end_effector_des = np.matrix([[.25],[0],[.4]])

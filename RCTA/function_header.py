@@ -30,13 +30,13 @@ class SpiralZipper:
 
 		got_port = [1, 1]
 		try:
-			sz.ser_encoder = serial.Serial('/dev/ttyACM0', 115200)
+			sz.ser_encoder = serial.Serial('/dev/ttyACM0', 57600)
 		except Exception, e:
 			print "No Arduino on ACM0"
 			print str(e)
 			got_port[0] = 0
 		try:
-			sz.ser_encoder = serial.Serial('/dev/ttyACM1', 115200)
+			sz.ser_encoder = serial.Serial('/dev/ttyACM1', 57600)
 		except Exception, e:
 			print "No Arduino on ACM1"
 			print str(e)
@@ -91,7 +91,7 @@ class SpiralZipper:
 		sz.ser_encoder.write('m9')
 
 		sleep(2)		
-		sz.calibration()
+		sz.calibration()		
 
 		sensed_grav = sz.get_encoder_readings() #initial orientation from the gimbal encoders
 		sleep(.005)
@@ -102,7 +102,7 @@ class SpiralZipper:
 			print sensed_grav[0]
 			print sensed_grav[1]
 			print sensed_grav[2]
-		
+
 		# Initial Sensed Position.
 		sz.sensed_pos = sz.rotate_encoder(sensed_grav[0], sensed_grav[1],sz.L[0])
 		sz.L = sz.cart2tether_actual(sz.sensed_pos)
@@ -120,6 +120,7 @@ class SpiralZipper:
 		sz.theta0 = [theta1,theta3,theta4] # initial encoder positions of the motors
 		sz.theta_prev = sz.theta0 # used to update delta position
 		sz.theta_curr = sz.theta0 # will hold the current theta of the system
+		sz.column_number = 0
 
 		print "sensed_orientation "
 		print sensed_grav
@@ -157,6 +158,7 @@ class SpiralZipper:
 		while choice !=0 and choice != 1:
 			choice = input("That is an invalid input. Please type 1 to recalibrate the arm length or 0 to run the program as is: ")
 		if choice ==1:
+
 			sz.L[0] = input("Please set the current length of arm in meters.") #measure from the base of the slider to the top of the band
 			sz.L[0] = sz.L[0] + .129
 			s = str(sz.L[0])
@@ -165,6 +167,7 @@ class SpiralZipper:
 		elif choice == 0:
 			file_obj = open("armLengthParams.txt", "r")
 			sz.L[0] = float(file_obj.read())
+			# sz.update_state()
 		file_obj.close()
 
 	def vacuum_cleaner(sz):  #sends a command to the arduino that controls the vacuum.  Toggles it on and off
@@ -213,31 +216,42 @@ class SpiralZipper:
 	def update_state (sz, c):
 		#This function updates the position of the system based on encoder data and the IMU.
 		rotation =sz.get_encoder_readings()
-
 		# theta2 = c.at.T2.get_pos()
 		theta3 = c.at.T3.get_pos()
 		theta4 = c.at.T4.get_pos()
 		#theta_reading = [theta1,theta2,theta3]
-		theta_reading = [rotation[2], theta3,theta4]
-	
+		theta_reading = [rotation[2], theta3, theta4, rotation[3]]
+		
 		print "motor theta readings:"
 		print theta_reading
 
 		sz.theta_curr = theta_reading # update current theta
 		dtheta = [0,0,0]
 		# dtheta[0] = sz.T1_Rotation()
-		dtheta[0] = theta_reading[0]
+		dtheta[0] = theta_reading[0]-sz.theta_prev[0]
 		dtheta[1:2] = sz.get_CR_delta() # calculate the change in position since last call
 
 		sz.theta_prev = sz.theta_curr
 
-		# devins_constant = .00707 #2091  #band height=1.75in.  constant is ratio of band height over 2*pi in meters.
-		# devins_constant = .00675
-		devins_constant = .000926 #.04445/48
+		# devins_constant = .000926 #.04445/48
+		#if height of band is ~1.8 in and there are 72 ticks per rev. Than
+		# the following number is 1.8/72 * .0254
+		devins_constant = .000640
+		# devins_constant = .00061453888
 		#rotation = sz.get_sensor_readings()
 		sz.L[0] = sz.L[0] + dtheta[0] * devins_constant #change in radians * height change per radian gets change in height
 		#sz.sensed_pos = sz.rotate(rotation[0],rotation[1],sz.L[0])
-		
+
+		if rotation[3] > 1 and rotation[3] < 32:
+			#the height of the band is 1.8 in. 1.8 * .0254 = .04572
+			estimated_height = (rotation[3] * 0.04572) + .1915
+			if abs(estimated_height - sz.L[0]) < .1:
+				sz.L[0] = (rotation[3] * 0.04572) + .1915
+				sz.column_number = rotation[3]
+
+		print "column_number is: "
+		print sz.column_number
+
 		sz.sensed_pos = sz.rotate_encoder(rotation[0],rotation[1],sz.L[0])
 
 		sz.L = sz.cart2tether_actual(sz.sensed_pos)  #tether length update based on IMU only
@@ -383,16 +397,17 @@ class SpiralZipper:
 		angle = []
 		startread = False
 		finishread = False
-		while len(angle) < 3 :
+		while len(angle) < 4 :
 			sz.ser_encoder.write('i')
-			sleep(.001)
+			sleep(.002)
 			if(sz.ser_encoder.inWaiting() > 0):
 				readval = sz.ser_encoder.readline()
 				readval = readval.split()
 				try: 
-					angle = [-float(readval[1]),float(readval[2]),float(readval[3])]
+					angle = [-float(readval[1]),float(readval[2]),float(readval[3]), float(readval[4])]
 				except:
 					print "Error! Recollecting angle data."
+					print angle
 		return angle
 
 	def PID_pos_control(sz,remote_or_auto): #position PID control
@@ -555,13 +570,14 @@ class SpiralZipper:
 		# # c.at.T2.set_torque(command_torques[1])
 
 		#actuation alterations for the column motor.  Limits up and down speed.
+		max_upward_torque = 75 + 200 * sz.L[0]
 		command_torques[0] = int(command_torques[0] * 255)
 		print "desired column torque is : "
 		print command_torques[0]
-		if command_torques[0] > 200:
-			command_torques[0] = 200
-		elif command_torques[0] < -125:
-			command_torques[0] = -125
+		if command_torques[0] > max_upward_torque:
+			command_torques[0] = max_upward_torque
+		elif command_torques[0] < -90:
+			command_torques[0] = -90
 		T1command = str('k' + repr(command_torques[0]))
 		sz.ser_encoder.write(T1command)
 		sleep(.001)
@@ -576,7 +592,7 @@ class SpiralZipper:
 		elif command_torques[1] > maximum:  #cannot output a torque higher than max pwm
 			command_torques[1] = maximum
 		if command_torques[0] > 0:  #if extending the torque load should increase with respect to length, but be less than normal.
-			command_torques[1] = 1
+			command_torques[1] = .25
 		if command_torques[0] < 0:  #if retracting the torque should be high to guarantee tension remains effectatious.
 			command_torques[1] = maximum - 2
 		T2command = str('m' + repr(command_torques[1]))
@@ -612,7 +628,10 @@ class SpiralZipper:
 			sz.L_vel_desired[i] = (L_goal[i] - sz.L[i]) / sz.looptime
 
 	def closing_function(sz): #turns off the torque control motor
-
+		T1command = str('k' + repr(0))
+		sz.ser_encoder.write(T1command)
+		sz.ser_encoder.write('m0')
+		sleep(8)
 		sz.ser_encoder.write('o')
 
 
